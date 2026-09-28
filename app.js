@@ -29,6 +29,7 @@ let subjects = loadJSON(KEY_SUBJECTS, []);
 let tests    = loadJSON(KEY_TESTS, []);
 let gradeFilter = loadJSON(KEY_FILTER, 'all');
 let currentView = 'schedule';
+let expandedDay = todayIndex();
 
 // --- Migration ---
 (function migrate() {
@@ -239,16 +240,25 @@ function renderSchedule() {
     const isToday = d === t;
     if (!(d < 5 || classes.length > 0)) continue;
 
+    const isOpen = expandedDay === d;
+
     html += `
-      <div class="day-card ${isToday ? 'is-today' : ''}">
-        <div class="day-header">
+      <div class="day-card ${isToday ? 'is-today' : ''} ${isOpen ? 'expanded' : ''}">
+        <div class="day-header" data-toggle-day="${d}">
           <span class="day-name">${DAY_NAMES[d]}</span>
           ${isToday ? '<span class="badge">Today</span>' : ''}
           <span class="day-count">${classes.length} ${classes.length === 1 ? 'class' : 'classes'}</span>
+          <svg class="day-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
         </div>
-        ${classes.length === 0
-          ? '<div class="empty">No classes</div>'
-          : classes.map(classRowHtml).join('')}
+        <div class="day-body">
+          <div class="day-body-inner">
+            ${classes.length === 0
+              ? '<div class="empty">No classes</div>'
+              : classes.map(classRowHtml).join('')}
+          </div>
+        </div>
       </div>
     `;
   }
@@ -934,6 +944,15 @@ function init() {
 
   document.addEventListener('click', (e) => {
     const target = e.target;
+
+    const dayHeader = target.closest('[data-toggle-day]');
+    if (dayHeader) {
+      haptic(6);
+      const d = parseInt(dayHeader.dataset.toggleDay, 10);
+      expandedDay = (expandedDay === d) ? -1 : d;
+      renderSchedule();
+      return;
+    }
 
     const seg = target.closest('#gradeFilter .seg');
     if (seg) {

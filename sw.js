@@ -1,4 +1,4 @@
-const CACHE = 'schedule-v5';
+const CACHE = 'schedule-v6';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json'];
 
 self.addEventListener('install', (e) => {
