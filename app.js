@@ -161,31 +161,25 @@ function render() {
 function renderTopbar() {
   const title = document.getElementById('pageTitle');
   const actions = document.getElementById('topbarActions');
-  if (currentView === 'schedule') {
-    title.textContent = 'My Schedule';
-    actions.innerHTML = `
-      <button class="icon-btn" data-action="import" aria-label="Import">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-      </button>
-      <button class="icon-btn" data-action="export" aria-label="Share">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-          <polyline points="16 6 12 2 8 6"/>
-          <line x1="12" y1="2" x2="12" y2="15"/>
-        </svg>
-      </button>
-    `;
-  } else if (currentView === 'tests') {
-    title.textContent = 'Tests & Orals';
-    actions.innerHTML = '';
-  } else {
-    title.textContent = 'My Grades';
-    actions.innerHTML = '';
-  }
+  title.textContent = currentView === 'schedule' ? 'My Schedule'
+                    : currentView === 'tests' ? 'Tests & Orals'
+                    : 'My Grades';
+  actions.innerHTML = `
+    <button class="icon-btn" data-action="import" aria-label="Import">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    </button>
+    <button class="icon-btn" data-action="export" aria-label="Export">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+        <polyline points="16 6 12 2 8 6"/>
+        <line x1="12" y1="2" x2="12" y2="15"/>
+      </svg>
+    </button>
+  `;
 }
 
 // --- Schedule ---
@@ -848,22 +842,102 @@ function openSubjectSheet(existing) {
 
 // ============ Import / Export ============
 function openExportSheet() {
-  const json = JSON.stringify(schedule);
+  // Local state for checkbox selection
+  const sel = { schedule: true, tests: true, grades: true };
 
-  const html = `
-    <div class="sheet-handle"></div>
-    <h2 class="sheet-title">Share schedule</h2>
-    <p class="sheet-desc">Send this to a classmate. They paste it into their app with "Import".</p>
-    <textarea class="sheet-textarea" readonly id="exportText">${escapeHtml(json)}</textarea>
-    <div class="sheet-actions">
-      <button type="button" class="btn btn-ghost" id="closeExport">Close</button>
-      <button type="button" class="btn btn-primary" id="copyExport">Copy</button>
-    </div>
-  `;
-  openSheet(html, (sheet) => {
+  function buildPayload() {
+    const payload = { app: 'School Schedule', version: 1, exportedAt: new Date().toISOString() };
+    if (sel.schedule) payload.schedule = schedule;
+    if (sel.tests)    payload.tests = tests;
+    if (sel.grades)   payload.grades = subjects;
+    return payload;
+  }
+
+  function html() {
+    const counts = {
+      schedule: schedule.length,
+      tests: tests.length,
+      grades: subjects.length
+    };
+    return `
+      <div class="sheet-handle"></div>
+      <h2 class="sheet-title">Export data</h2>
+      <p class="sheet-desc">Choose what to include in the export.</p>
+
+      <div class="export-list">
+        <label class="export-row">
+          <input type="checkbox" data-export="schedule" ${sel.schedule ? 'checked' : ''}>
+          <div class="export-info">
+            <div class="export-name">Schedule</div>
+            <div class="export-count">${counts.schedule} class${counts.schedule === 1 ? '' : 'es'}</div>
+          </div>
+        </label>
+        <label class="export-row">
+          <input type="checkbox" data-export="tests" ${sel.tests ? 'checked' : ''}>
+          <div class="export-info">
+            <div class="export-name">Tests & Orals</div>
+            <div class="export-count">${counts.tests} item${counts.tests === 1 ? '' : 's'}</div>
+          </div>
+        </label>
+        <label class="export-row">
+          <input type="checkbox" data-export="grades" ${sel.grades ? 'checked' : ''}>
+          <div class="export-info">
+            <div class="export-name">Grades</div>
+            <div class="export-count">${counts.grades} subject${counts.grades === 1 ? '' : 's'}</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="export-quick">
+        <button type="button" class="link-btn" id="selectAll">Select all</button>
+        <button type="button" class="link-btn" id="clearAll">Clear</button>
+      </div>
+
+      <label class="field" style="margin-top:14px">
+        <span>Preview</span>
+        <textarea class="sheet-textarea" readonly id="exportText">${escapeHtml(JSON.stringify(buildPayload(), null, 2))}</textarea>
+      </label>
+
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-ghost" id="closeExport">Close</button>
+        <button type="button" class="btn btn-primary" id="copyExport">Copy</button>
+      </div>
+    `;
+  }
+
+  function mount(sheet) {
+    const updatePreview = () => {
+      const textarea = sheet.querySelector('#exportText');
+      if (textarea) textarea.value = JSON.stringify(buildPayload(), null, 2);
+    };
+
+    sheet.querySelectorAll('input[data-export]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        haptic(6);
+        sel[cb.dataset.export] = cb.checked;
+        updatePreview();
+      });
+    });
+
+    sheet.querySelector('#selectAll').addEventListener('click', () => {
+      haptic(6);
+      sel.schedule = sel.tests = sel.grades = true;
+      sheet.querySelectorAll('input[data-export]').forEach(cb => cb.checked = true);
+      updatePreview();
+    });
+
+    sheet.querySelector('#clearAll').addEventListener('click', () => {
+      haptic(6);
+      sel.schedule = sel.tests = sel.grades = false;
+      sheet.querySelectorAll('input[data-export]').forEach(cb => cb.checked = false);
+      updatePreview();
+    });
+
     sheet.querySelector('#closeExport').addEventListener('click', () => { haptic(6); closeSheet(); });
+
     sheet.querySelector('#copyExport').addEventListener('click', async () => {
       haptic(10);
+      const json = JSON.stringify(buildPayload(), null, 2);
       try { await navigator.clipboard.writeText(json); }
       catch {
         const t = sheet.querySelector('#exportText');
@@ -873,15 +947,17 @@ function openExportSheet() {
       btn.textContent = 'Copied!';
       setTimeout(() => { btn.textContent = 'Copy'; }, 1400);
     });
-  });
+  }
+
+  openSheet(html(), mount);
 }
 
 function openImportSheet() {
   const html = `
     <div class="sheet-handle"></div>
-    <h2 class="sheet-title">Import schedule</h2>
-    <p class="sheet-desc">Paste the schedule JSON from a classmate. This will replace your current schedule.</p>
-    <textarea class="sheet-textarea" id="importText" placeholder='[{"id":"...","day":0,"start":"08:00","end":"09:00","subject":"Math","room":"A1","colorIndex":0}]'></textarea>
+    <h2 class="sheet-title">Import data</h2>
+    <p class="sheet-desc">Paste exported JSON below. Only the sections present in the file will be replaced.</p>
+    <textarea class="sheet-textarea" id="importText" placeholder='{"schedule":[...],"tests":[...],"grades":[...]}'></textarea>
     <div class="sheet-actions">
       <button type="button" class="btn btn-ghost" id="pasteBtn">Paste</button>
       <button type="button" class="btn btn-ghost" id="cancelImport">Cancel</button>
@@ -890,6 +966,7 @@ function openImportSheet() {
   `;
   openSheet(html, (sheet) => {
     const textarea = sheet.querySelector('#importText');
+    const messenger = document.getElementById('sheet');
     sheet.querySelector('#cancelImport').addEventListener('click', () => { haptic(6); closeSheet(); });
 
     sheet.querySelector('#pasteBtn').addEventListener('click', async () => {
@@ -903,23 +980,71 @@ function openImportSheet() {
     sheet.querySelector('#importBtn').addEventListener('click', () => {
       haptic(12);
       try {
-        let parsed = JSON.parse(textarea.value);
-        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.schedule)) {
-          parsed = parsed.schedule;
+        const raw = JSON.parse(textarea.value);
+
+        const imported = [];
+
+        // Detect sections. Backwards compatible: plain array = schedule only
+        let scheduleIn = null, testsIn = null, gradesIn = null;
+
+        if (Array.isArray(raw)) {
+          scheduleIn = raw;
+        } else if (raw && typeof raw === 'object') {
+          if (Array.isArray(raw.schedule)) scheduleIn = raw.schedule;
+          if (Array.isArray(raw.tests))    testsIn = raw.tests;
+          if (Array.isArray(raw.grades))   gradesIn = raw.grades;
         }
-        if (!Array.isArray(parsed)) throw new Error('Not a valid schedule');
-        schedule = parsed.map(item => ({
-          id: item.id || uid(),
-          day: typeof item.day === 'number' ? item.day : 0,
-          start: item.start || '08:00',
-          end: item.end || '09:00',
-          subject: item.subject || 'Subject',
-          room: item.room || '',
-          colorIndex: typeof item.colorIndex === 'number' ? item.colorIndex : 0
-        }));
-        saveJSON(KEY_SCHEDULE, schedule);
+
+        if (!scheduleIn && !testsIn && !gradesIn) {
+          throw new Error('No recognizable data in file');
+        }
+
+        if (scheduleIn) {
+          schedule = scheduleIn.map(item => ({
+            id: item.id || uid(),
+            day: typeof item.day === 'number' ? item.day : 0,
+            start: item.start || '08:00',
+            end: item.end || '09:00',
+            subject: item.subject || 'Subject',
+            room: item.room || '',
+            colorIndex: typeof item.colorIndex === 'number' ? item.colorIndex : 0
+          }));
+          saveJSON(KEY_SCHEDULE, schedule);
+          imported.push('schedule');
+        }
+
+        if (testsIn) {
+          tests = testsIn.map(t => ({
+            id: t.id || uid(),
+            subject: t.subject || 'Subject',
+            date: t.date || todayISO(),
+            time: t.time || '',
+            type: t.type || 'test',
+            note: t.note || ''
+          }));
+          saveJSON(KEY_TESTS, tests);
+          imported.push('tests');
+        }
+
+        if (gradesIn) {
+          subjects = gradesIn.map(s => ({
+            id: s.id || uid(),
+            name: s.name || 'Subject',
+            grades: Array.isArray(s.grades)
+              ? s.grades.map(g => ({
+                  id: g.id || uid(),
+                  value: typeof g.value === 'number' ? g.value : 1,
+                  sem: typeof g.sem === 'number' ? g.sem : 1
+                }))
+              : []
+          }));
+          saveJSON(KEY_SUBJECTS, subjects);
+          imported.push('grades');
+        }
+
         closeSheet();
         render();
+        alert('Imported: ' + imported.join(', '));
       } catch (err) {
         alert('Import failed: ' + err.message);
       }
